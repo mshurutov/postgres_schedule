@@ -1,0 +1,64 @@
+---
+# tasks file for mshurutov.postgres_schedule
+- name: Check if ansible version is equal or greater than 2.11
+  ansible.builtin.fail:
+    msg: "Ansible core should be equal or greater than 2.11"
+  when: ansible_version.full is ansible.builtin.version('2.11','<')
+- name: Check if python is equal or greater than 3
+  ansible.builtin.fail:
+    msg: "Python should be equal or greater than 3"
+  when: ansible_python.version.major is ansible.builtin.version('3','<')
+
+- name: Install packages
+  block:
+    - name: Install packages on normal distro
+      when: ansible_pkg_mgr != "apt_rpm"
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ postgres_schedule_packages }}"
+    - name: Install packages on normal distro
+      when: ansible_pkg_mgr == "apt_rpm"
+      ansible.builtin.package:
+        name: "{{ item }}"
+        state: present_not_latest
+      loop: "{{ postgres_schedule_packages }}"
+
+- name: Check if postgres schedule config dir exists
+  ansible.builtin.file:
+    group: "{{ postgres_system_user }}"
+    mode: "0700"
+    owner: "{{ postgres_system_user }}"
+    path: "{{ postgres_schedule_config_dir }}"
+    state: "directory"
+      
+- name: Install config for postgres scheduler
+  ansible.builtin.template:
+    dest: "{{ postgres_schedule_config_dir }}/{{ item.name }}"
+    group: "{{ postgres_schedule_system_user }}"
+    mode: "0600"
+    owner: "{{ postgres_schedule_system_user }}"
+    src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_packages }}.conf.j2"
+  loop: "{{ postgres_scheduler }}"
+  
+- name: Install unit-file for systemd if it is necessary
+  when: postgres_schedule_systemd is defined and postgres_schedule_systemd | bool
+  block:
+    - name: Check if user systemd directory exists
+      ansible.builtin.file:
+        group: "{{ postgres_schedule_system_user }}"
+        mode: "0755"
+        owner: "{{ postgres_schedule_system_user }}"
+        path: "{{ postgres_schedule_unit_dir }}"
+        state: "directory"
+    - name: Install unit-file for postgres scheduler
+      ansible.builtin.template:
+        dest: "{{ postgres_schedule_unit_dir }}/{{ postgres_schedule_packages }}@.service"
+        group: "{{ postgres_schedule_system_user }}"
+        mode: "0755"
+        owner: "{{ postgres_schedule_system_user }}"
+        src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_packages }}.service.j2"
+      notify:
+        - "systemd daemon-reload"
+        - "{{ postgres_schedule_packages }} enable"
+        - "{{ postgres_schedule_packages }} start"

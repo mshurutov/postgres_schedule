@@ -1,0 +1,22 @@
+[Unit]
+Description=Timetable scheduler for PostgreSQL database server
+After=network.target,postgresql.service
+
+[Service]
+Type=simple
+
+EnvironmentFile=${HOME}/pg_timetable/%i
+
+OOMScoreAdjust=-1000
+Environment=PG_OOM_ADJUST_FILE=/proc/self/oom_score_adj
+Environment=PG_OOM_ADJUST_VALUE=0
+
+PIDFile=/run/pg_timetable.pid
+ExecStart=pg_timetable postgresql://${PGUSER}:${PGPASSWORD}@{{ common_ip4_default }}/${PGDATABASE} -c %i
+ExecReload=/bin/kill -1 -- $MAINPID
+ExecStop=/bin/kill -- $MAINPID
+TimeoutSec=60
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

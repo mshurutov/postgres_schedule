@@ -1,0 +1,6 @@
+---
+- name: Testing role
+  hosts: localhost
+  remote_user: root
+  roles:
+    - mshurutov.postgres_schedule

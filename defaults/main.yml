@@ -1,0 +1,11 @@
+---
+# defaults file for mshurutov.postgres_schedule
+postgres_schedule_files_path: "{{ role_path }}/files"
+postgres_schedule_templates_path: "{{ role_path }}/templates"
+postgres_schedule_vars_path: "{{ role_path }}/vars"
+postgres_schedule_packages:
+postgres_schedule_systemd: false
+postgres_schedule_config_dir: "{{ postgres_home_dir }}/{{ postgres_schedule_packages }}"
+postgres_schedule_unit_dir: "{{ postgres_home_dir }}/.config/systemd/user"
+#  - pg_timetable
+#  - pg_cron

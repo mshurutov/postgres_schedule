@@ -1,0 +1,17 @@
+---
+# handlers file for mshurutov.postgres_schedule
+- name: systemd daemon-reload
+  ansible.builtin.systemd_service:
+    daemon_reload: true
+
+- name: pg_timetable enable
+  ansible.builtin.systemd_service:
+    enabled: true
+    name: "pg_timetable@{{ item.name }}"
+  loop: "{{ postgres_scheduler }}"
+
+- name: pg_timetable start
+  ansible.builtin.systemd_service:
+    name: "pg_timetable@{{ item.name }}"
+    state: started
+  loop: "{{ postgres_scheduler }}"
