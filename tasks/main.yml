@@ -31,7 +31,7 @@
     owner: "{{ postgres_system_user }}"
     path: "{{ postgres_schedule_config_dir }}"
     state: "directory"
-      
+
 - name: Install config for postgres scheduler
   ansible.builtin.template:
     dest: "{{ postgres_schedule_config_dir }}/{{ item.name }}"
@@ -40,7 +40,7 @@
     owner: "{{ postgres_schedule_system_user }}"
     src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_packages }}.conf.j2"
   loop: "{{ postgres_scheduler }}"
-  
+
 - name: Install unit-file for systemd if it is necessary
   when: postgres_schedule_systemd is defined and postgres_schedule_systemd | bool
   block:
@@ -59,6 +59,6 @@
         owner: "{{ postgres_schedule_system_user }}"
         src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_packages }}.service.j2"
       notify:
-        - "systemd daemon-reload"
-        - "{{ postgres_schedule_packages }} enable"
-        - "{{ postgres_schedule_packages }} start"
+        - "Systemd daemon-reload"
+        - "Enable {{ postgres_schedule_packages }}"
+        - "Start {{ postgres_schedule_packages }}"
