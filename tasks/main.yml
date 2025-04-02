@@ -10,22 +10,33 @@
   when: ansible_python.version.major is ansible.builtin.version('3','<')
 
 - name: Install packages
+  become: true
+  become_user: "root"
   tags: postgres_schedule_install
+  notify:
+    - "Systemd daemon-reload"
+    - "Enable {{ postgres_schedule_package }}"
+    - "Start {{ postgres_schedule_package }}"
   block:
+    - name: Check if necessary repo is added
+      when: ansible_pkg_mgr == "apt" or ansible_pkg_mgr == "apt_rpm"
+      ansible.builtin.include_role:
+        name: "mshurutov.common"
+        tasks_from: "{{ ansible_pkg_mgr }}-repo-add.yml"
     - name: Install packages on normal distro
       when: ansible_pkg_mgr != "apt_rpm"
       ansible.builtin.package:
-        name: "{{ item }}"
+        name: "{{ postgres_schedule_package }}"
         state: present
-      loop: "{{ postgres_schedule_packages }}"
     - name: Install packages on normal distro
       when: ansible_pkg_mgr == "apt_rpm"
       ansible.builtin.package:
-        name: "{{ item }}"
+        name: "{{ postgres_schedule_package }}"
         state: present_not_latest
-      loop: "{{ postgres_schedule_packages }}"
 
 - name: Check if postgres schedule config dir exists
+  become: true
+  become_user: "{{ postgres_system_user }}"
   tags: postgres_schedule_config,postgres_schedule_config_dir
   ansible.builtin.file:
     group: "{{ postgres_system_user }}"
@@ -35,34 +46,43 @@
     state: "directory"
 
 - name: Install config for postgres scheduler
+  become: true
+  become_user: "{{ postgres_system_user }}"
   tags: postgres_schedule_config,postgres_schedule_config_files
   ansible.builtin.template:
     dest: "{{ postgres_schedule_config_dir }}/{{ item.name }}"
     group: "{{ postgres_system_user }}"
     mode: "0600"
     owner: "{{ postgres_system_user }}"
-    src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_packages }}.conf.j2"
+    src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_package }}.conf.j2"
   loop: "{{ postgres_scheduler }}"
 
-- name: Install unit-file for systemd if it is necessary
-  when: postgres_schedule_systemd is defined and postgres_schedule_systemd | bool
-  tags: postgres_schedule_start
-  block:
-    - name: Check if user systemd directory exists
-      ansible.builtin.file:
-        group: "{{ postgres_system_user }}"
-        mode: "0755"
-        owner: "{{ postgres_system_user }}"
-        path: "{{ postgres_schedule_unit_dir }}"
-        state: "directory"
-    - name: Install unit-file for postgres scheduler
-      ansible.builtin.template:
-        dest: "{{ postgres_schedule_unit_dir }}/{{ postgres_schedule_packages }}@.service"
-        group: "{{ postgres_system_user }}"
-        mode: "0755"
-        owner: "{{ postgres_system_user }}"
-        src: "{{ postgres_schedule_templates_path }}/{{ postgres_schedule_packages }}.service.j2"
-      notify:
-        - "Systemd daemon-reload"
-        - "Enable {{ postgres_schedule_packages }}"
-        - "Start {{ postgres_schedule_packages }}"
+- name: Check if postgres_schedule user is in ~/.pgpass
+  become: true
+  become_user: "{{ postgres_system_user }}"
+  tags: postgres_schedule_config,pgpass
+  ansible.builtin.lineinfile:
+    path: "{{ postgres_home_dir }}/.pgpass"
+    line: "{{ item.1 }}:*:*:{{ item.0.pguser }}:{{ item.0.pgpassword }}"
+    owner: "{{ postgres_system_user }}"
+    group: "{{ postgres_system_user }}"
+    mode: "0600"
+    create: true
+    state: "present"
+  loop: "{{ postgres_scheduler | product([common_ip4_default, '127.0.0.1']) }}"
+
+- name: Flush handlers
+  ansible.builtin.meta: flush_handlers
+
+- name: Add jobs into postgres scheduler
+  become: true
+  become_user: "{{ postgres_system_user }}"
+  tags: postgres_schedule_jobs
+  community.postgresql.postgresql_query:
+    login_host: "127.0.0.1"
+    login_user: "{{ item.0.pguser }}"
+    db: "{{ item.0.dbname }}"
+    query: "{{ item.1.query }}"
+    search_path: "{{ item.1.search_path | default(omit) }}"
+    session_role: "{{ item.0.pguser }}"
+  loop: "{{ postgres_scheduler | subelements('jobs', skip_missing=True) }}"
